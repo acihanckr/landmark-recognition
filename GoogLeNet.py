@@ -32,6 +32,16 @@ def Inception(n_conv1x1, n_reduce3x3, n_conv3x3, n_reduce5x5, n_conv5x5, n_pool_
 
 LRN = lambda: Lambda(tf.nn.local_response_normalization)
 
+def sequence(fns):
+
+    def inner(z):
+        res = z
+        for f in fns:
+            res = f(res)
+        return res
+
+    return inner
+
 class GoogLeNet():
     @staticmethod
     def create_model(input_shape, num_classes):
@@ -107,52 +117,33 @@ class GoogLeNet():
 
         ### Model
         inputs = Input(shape=input_shape)
-        z = conv1(inputs)
-        z = pool1(z)
-        z = lrn1(z)
-        z = conv2a(z)
-        z = conv2(z)
-        z = lrn2(z)
-        z = pool2(z)
-        z = inception3a(z)
-        z = inception3b(z)
-        z = pool3(z)
-        z = inception4a(z)
+        first_layers = sequence([
+            conv1, pool1, lrn1, conv2a, conv2, lrn2, pool2, inception3a, inception3b, pool3, inception4a
+        ])
+        curr = first_layers(inputs)
 
         # first branch
-        z1 = out1_pool(z)
-        z1 = out1_conv(z1)
-        z1 = out1_flat(z1)
-        z1 = out1_dense1(z1)
-        z1 = out1_dropout(z1)
-        z1 = out1_dense2(z1)
-        z1 = out1_softmax(z1)
+        first_branch = sequence([
+            out1_pool, out1_conv, out1_flat, out1_dense1, out1_dropout, out1_dense2, out1_softmax
+        ])
+        out1 = first_branch(curr)
 
-        z = inception4b(z)
-        z = inception4c(z)
-        z = inception4d(z)
+        mid_layers_1 = sequence([inception4b, inception4c, inception4d])
+        curr = mid_layers_1(curr)
 
         # second branch
-        z2 = out2_pool(z)
-        z2 = out2_conv(z2)
-        z2 = out2_flat(z2)
-        z2 = out2_dense1(z2)
-        z2 = out2_dropout(z2)
-        z2 = out2_dense2(z2)
-        z2 = out2_softmax(z2)
+        second_branch = sequence([
+            out2_pool, out2_conv, out2_flat, out2_dense1, out2_dropout, out2_dense2, out2_softmax
+        ])
+        out2 = second_branch(curr)
 
-        z = inception4e(z)
-        z = pool4(z)
-        z = inception5a(z)
-        z = inception5b(z)
+        mid_layers_2 = sequence([inception4e, pool4, inception5a, inception5b])
+        curr = mid_layers_2(curr)
 
         # third branch
-        z3 = out3_pool(z)
-        z3 = out3_flat(z3)
-        z3 = out3_dropout(z3)
-        z3 = out3_dense(z3)
-        z3 = out3_softmax(z3)
+        third_branch = sequence([
+            out3_pool, out3_flat, out3_dropout, out3_dense, out3_softmax
+        ])
+        out3 = third_branch(curr)
 
-        outputs = [z1, z2, z3]
-
-        return Model(input=inputs, outputs=outputs)
+        return Model(input=inputs, outputs=[out1, out2, out3])
